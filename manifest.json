@@ -1,17 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Word🤓☝️",
-  "version": "0.3.0",
-  "description": "透明小窗里的英英查词，适合边读边查。",
+  "version": "0.4.0",
+  "description": "Click a word to see its English definition while reading.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://api.dictionaryapi.dev/*", "https://www.dictionaryapi.com/*"],
   "optional_host_permissions": ["https://*/*"],
-  "web_accessible_resources": [{ "resources": ["assets/merriam-webster.png"], "matches": ["https://*/*"] }],
   "background": { "service_worker": "background.js" },
   "action": { "default_popup": "settings.html" },
   "options_page": "settings.html",
   "content_scripts": [{
     "matches": [
+      "https://*.z-lib.sk/*",
       "https://*.z-library.sk/*",
       "https://*.z-library.ec/*",
       "https://*.z-library.se/*",

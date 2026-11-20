@@ -83,6 +83,14 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     lookup(message.word).then(reply, () => reply({ status: 'error' }));
     return true;
   }
+  if (message.type === 'set-frame-lookup-state' && sender.frameId === 0) {
+    chrome.tabs.sendMessage(sender.tab.id, { type: 'frame-lookup-state', enabled: message.enabled }).catch(() => {});
+  }
+  if (message.type === 'get-frame-lookup-state' && sender.frameId > 0) {
+    chrome.tabs.sendMessage(sender.tab.id, { type: 'reader-lookup-state' }, { frameId: 0 })
+      .then(value => reply(value === true), () => reply(false));
+    return true;
+  }
   if (message.type === 'frame-word' && sender.frameId > 0) {
     const word = typeof message.word === 'string' && normalizeWord(message.word);
     if (word) {

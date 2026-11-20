@@ -3,21 +3,27 @@
   globalThis.readingLookupInstalled = true;
 
   function watchWordClick(onWord, mayLookup = () => true) {
-    document.addEventListener('click', event => {
-      if (!mayLookup() || event.button !== 0 || event.detail !== 1 || event.defaultPrevented ||
-          event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    let hovered;
+    let frame = 0;
+    const cursor = document.createElement('style');
+    cursor.textContent = '[data-word-hover], [data-word-hover] * { cursor: pointer !important; }';
 
+    function clearHover() {
+      hovered?.removeAttribute('data-word-hover');
+      hovered = null;
+    }
+
+    function wordAtPoint(event) {
       const target = event.target;
       if (!(target instanceof Element) || target.isContentEditable ||
-          target.closest('a, button, input, select, textarea, label, summary, [data-reading-lookup]') ||
-          window.getSelection()?.isCollapsed === false) return;
+          target.closest('a, button, input, select, textarea, label, summary, [data-reading-lookup]')) return;
 
       const { clientX: x, clientY: y } = event;
       const point = document.caretPositionFromPoint?.(x, y);
       const fallback = point ? null : document.caretRangeFromPoint?.(x, y);
       const node = point?.offsetNode ?? fallback?.startContainer;
       const offset = point?.offset ?? fallback?.startOffset;
-      if (node?.nodeType !== Node.TEXT_NODE) return;
+      if (node?.nodeType !== Node.TEXT_NODE || !target.contains(node)) return;
 
       const range = document.createRange();
       for (const match of node.data.matchAll(/[a-z]+(?:['‘’‐‑-][a-z]+)*/gi)) {
@@ -28,16 +34,63 @@
         const hit = Array.from(range.getClientRects()).some(rect =>
           x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
         );
-        const word = hit && normalizeWord(match[0]);
-        if (word) onWord(word);
+        if (hit) return normalizeWord(match[0]);
         break;
       }
+    }
+
+    document.addEventListener('pointermove', event => {
+      if (event.pointerType !== 'mouse' || !mayLookup()) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const target = mayLookup() && wordAtPoint(event) ? event.target : null;
+        if (target === hovered) return;
+        clearHover();
+        if (target) {
+          if (!cursor.isConnected) document.documentElement.append(cursor);
+          hovered = target;
+          hovered.setAttribute('data-word-hover', '');
+        }
+      });
     });
+    document.documentElement.addEventListener('pointerleave', clearHover);
+    document.addEventListener('click', event => {
+      if (!mayLookup() || event.button !== 0 || event.detail !== 1 || event.defaultPrevented ||
+          event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
+          window.getSelection()?.isCollapsed === false) return;
+      const word = wordAtPoint(event);
+      if (word) onWord(word);
+    });
+    return clearHover;
   }
 
   if (window !== window.top) {
-    watchWordClick(word => chrome.runtime.sendMessage({ type: 'frame-word', word }).catch(() => {}));
+    let enabled = false;
+    const clearHover = watchWordClick(
+      word => chrome.runtime.sendMessage({ type: 'frame-word', word }).catch(() => {}),
+      () => enabled
+    );
+    const update = value => {
+      enabled = value === true;
+      if (!enabled) clearHover();
+    };
+    chrome.runtime.onMessage.addListener(message => {
+      if (message.type === 'frame-lookup-state') update(message.enabled);
+    });
+    chrome.runtime.sendMessage({ type: 'get-frame-lookup-state' }).then(update, () => {});
     return;
+  }
+
+  function isReader() {
+    return /(?:^|\/)(?:reader|read|read-online|online-reader|book-reader|readonline|read\.php)(?:[\/._-]|$)/i.test(location.pathname) ||
+      [...document.querySelectorAll('epub-view, epub-reader, foliate-view, #epub-reader, #pdf-viewer, #book-reader, #bookReader, .epub-container, iframe[src]')]
+        .some(element => {
+          if (element.tagName === 'IFRAME') {
+            if (!/(?:reader|epub|read-online|readonline|viewer\.html|\.pdf(?:[?#]|$))/i.test(element.src)) return false;
+          }
+          const rect = element.getBoundingClientRect();
+          return rect.width >= 100 && rect.height >= 100 && getComputedStyle(element).visibility === 'visible';
+        });
   }
 
   const host = document.createElement('div');
@@ -49,8 +102,11 @@
         color-scheme: light dark; font: 13px/1.45 system-ui, sans-serif; color: CanvasText; }
       [hidden] { display: none !important; }
       section { box-sizing: border-box; width: max-content; max-width: min(228px, calc(100vw - 24px));
-        padding: 4px 6px; border: 1px dashed currentColor; border-radius: 9px;
-        background: color-mix(in srgb, Canvas 78%, transparent); backdrop-filter: blur(5px); }
+        position: relative; padding: 5px 7px; border-radius: 8px;
+        background: color-mix(in srgb, Canvas 30%, transparent); backdrop-filter: blur(5px); }
+      .outline { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+      .outline rect { x: 0.65px; y: 0.65px; width: calc(100% - 1.3px); height: calc(100% - 1.3px);
+        rx: 7px; fill: none; stroke: currentColor; stroke-opacity: .55; stroke-width: 1.3; stroke-dasharray: 4 3; }
       .row, form { display: flex; gap: 4px; align-items: center; }
       button, input { font: inherit; color: inherit; }
       button { background: transparent; border: 0; border-radius: 4px; padding: 3px 5px; cursor: pointer; }
@@ -64,19 +120,20 @@
       p, ol { margin: 4px 0; } ol { padding-inline-start: 21px; }
       a { color: LinkText; }
       .credit { font-size: 11px; }
-      .credit img { display: block; }
     </style>
-    <section id="invite" aria-label="启用查词">
-      <div class="row"><span>开启点词查词？</span><button id="yes">开启</button><button id="no">稍后</button></div>
+    <section id="invite" aria-label="Enable word lookup" hidden>
+      <svg class="outline" aria-hidden="true"><rect></rect></svg>
+      <div class="row"><span>Enable word lookup?</span><button id="yes">Enable</button><button id="no">Later</button></div>
     </section>
-    <section id="panel" aria-label="读书小词窗" hidden>
+    <section id="panel" aria-label="Word lookup" hidden>
+      <svg class="outline" aria-hidden="true"><rect></rect></svg>
       <div class="row">
-        <button id="toggle" aria-pressed="false">启动点词</button>
-        <button id="manual" aria-label="手动查词" aria-expanded="false" title="手动查词">🤪</button>
-        <button id="close" aria-label="收起释义" title="收起释义" hidden>×</button>
+        <button id="toggle" aria-pressed="false">Start</button>
+        <button id="manual" aria-label="Look up a word" aria-expanded="false" title="Look up a word">🤪</button>
+        <button id="close" aria-label="Close definition" title="Close definition" hidden>×</button>
       </div>
-      <form class="extra" hidden><input aria-label="输入一个英文单词" placeholder="输入英文单词" maxlength="80"
-        autocomplete="off" spellcheck="false" required><button type="submit">查</button></form>
+      <form class="extra" hidden><input aria-label="Enter an English word" placeholder="English word" maxlength="80"
+        autocomplete="off" spellcheck="false" required><button type="submit">Look up</button></form>
       <div class="extra result" hidden>
         <strong id="headword" lang="en"></strong>
         <div id="definition" role="status"></div>
@@ -86,7 +143,6 @@
             rel="noopener noreferrer">CC BY-SA 3.0</a>
         </div>
         <div id="merriam-credit" class="credit" hidden>
-          <img width="50" height="50" alt="Merriam-Webster">
           <a target="_blank" rel="noopener noreferrer">Merriam-Webster's Learner's Dictionary</a>
         </div>
       </div>
@@ -107,18 +163,25 @@
   const credit = get('.credit');
   const merriamCredit = get('#merriam-credit');
   let active = false;
+  let readerOpen = false;
+  let readerLocation = '';
   let request = 0;
 
   function setActive(next) {
     active = next;
-    toggle.textContent = active ? '暂停点词' : '启动点词';
+    toggle.textContent = active ? 'Pause' : 'Start';
     toggle.setAttribute('aria-pressed', String(active));
+    if (!active) clearHover();
+    chrome.runtime.sendMessage({ type: 'set-frame-lookup-state', enabled: active }).catch(() => {});
   }
 
   function setManual(open) {
     form.hidden = !open;
     manual.setAttribute('aria-expanded', String(open));
-    if (open) input.focus();
+    if (open) {
+      clearHover();
+      input.focus();
+    }
   }
 
   function clearResult() {
@@ -128,11 +191,11 @@
   }
 
   const messages = {
-    access: '韦氏密钥无效，请检查是否选择了 Learners Dictionary。',
-    missing: '没有找到该词的释义。',
-    limit: '词典请求次数已达上限。',
-    error: '暂时无法查询词典，请稍后重试。',
-    invalid: '请输入一个英文单词。'
+    access: 'Check your Merriam-Webster Learner’s Dictionary API key.',
+    missing: 'No definition found.',
+    limit: 'Dictionary request limit reached.',
+    error: 'Could not reach the dictionary. Try again.',
+    invalid: 'Enter one English word.'
   };
 
   function showDefinition(response) {
@@ -167,7 +230,7 @@
       return;
     }
     source.href = `https://en.wiktionary.org/wiki/${encodeURIComponent(word)}`;
-    definition.textContent = '查询中…';
+    definition.textContent = 'Looking up…';
     let response;
     try {
       response = await chrome.runtime.sendMessage({ type: 'lookup', word });
@@ -176,8 +239,6 @@
     }
     if (currentRequest !== request) return;
     if (response?.provider === 'merriam-webster') {
-      const logo = get('#merriam-credit img');
-      if (!logo.hasAttribute('src')) logo.src = chrome.runtime.getURL('assets/merriam-webster.png');
       get('#merriam-credit a').href = `https://www.merriam-webster.com/dictionary/${encodeURIComponent(word)}`;
       merriamCredit.hidden = false;
     } else {
@@ -219,10 +280,46 @@
   const handleWord = word => {
     if (active && form.hidden) lookup(word);
   };
-  watchWordClick(handleWord, () => active && form.hidden);
-  chrome.runtime.onMessage.addListener(message => {
+  const clearHover = watchWordClick(handleWord, () => active && form.hidden);
+  function syncReader() {
+    const detected = isReader();
+    const currentLocation = location.pathname + location.search;
+    if (detected === readerOpen && (!detected || currentLocation === readerLocation)) return;
+    readerOpen = detected;
+    readerLocation = currentLocation;
+    setActive(false);
+    setManual(false);
+    clearResult();
+    panel.hidden = true;
+    invite.hidden = !detected;
+    if (detected) document.documentElement.append(host);
+    else host.remove();
+  }
+
+  chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     if (message.type === 'reader-word') handleWord(message.word);
-    if (message.type === 'show-invite' && panel.hidden) invite.hidden = false;
+    if (message.type === 'reader-lookup-state') reply(active);
+    if (message.type === 'show-invite') {
+      syncReader();
+      if (readerOpen && panel.hidden) invite.hidden = false;
+      reply(readerOpen);
+    }
   });
-  document.documentElement.append(host);
+  let pending = false;
+  const scheduleSync = () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => {
+      pending = false;
+      syncReader();
+    });
+  };
+  new MutationObserver(scheduleSync).observe(document.documentElement, {
+    childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'src', 'hidden']
+  });
+  window.navigation?.addEventListener('currententrychange', scheduleSync);
+  window.addEventListener('popstate', scheduleSync);
+  window.addEventListener('hashchange', scheduleSync);
+  window.addEventListener('resize', scheduleSync);
+  syncReader();
 })();

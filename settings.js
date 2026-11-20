@@ -8,7 +8,7 @@ async function loadDictionary() {
     key.value = merriamWebsterKey ?? '';
     save.disabled = false;
   } catch {
-    dictionaryStatus.textContent = '无法读取词典设置。';
+    dictionaryStatus.textContent = 'Could not load dictionary settings.';
   }
 }
 
@@ -22,9 +22,9 @@ document.querySelector('form').addEventListener('submit', async event => {
     } else {
       await chrome.storage.local.remove('merriamWebsterKey');
     }
-    dictionaryStatus.textContent = merriamWebsterKey ? '已保存。接下来使用韦氏学习词典。' : '已切换到免密词典。';
+    dictionaryStatus.textContent = merriamWebsterKey ? 'Saved. Using Merriam-Webster.' : 'Now using Wiktionary.';
   } catch {
-    dictionaryStatus.textContent = '无法保存词典设置。';
+    dictionaryStatus.textContent = 'Could not save dictionary settings.';
   } finally {
     save.disabled = false;
   }
@@ -56,7 +56,7 @@ async function registerSite(tabId, pattern) {
     if (!builtIn) {
       const granted = await chrome.permissions.request({ origins: [pattern] });
       if (!granted) {
-        siteStatus.textContent = '当前站点未授权。';
+        siteStatus.textContent = 'Site access was not granted.';
         return;
       }
 
@@ -70,19 +70,19 @@ async function registerSite(tabId, pattern) {
     }
     // Inject now as well so an already open page does not require a reload.
     await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ['word.js', 'reader.js'] });
-    await chrome.tabs.sendMessage(tabId, { type: 'show-invite' }, { frameId: 0 });
-    siteStatus.textContent = '已启用。返回阅读页即可确认。';
+    const reading = await chrome.tabs.sendMessage(tabId, { type: 'show-invite' }, { frameId: 0 });
+    siteStatus.textContent = reading ? 'Return to the reader to confirm.' : 'Site enabled. Open a book in the online reader.';
   } catch {
     try {
       await chrome.scripting.executeScript({ target: { tabId }, files: ['word.js', 'reader.js'] });
-      await chrome.tabs.sendMessage(tabId, { type: 'show-invite' }, { frameId: 0 });
-      siteStatus.textContent = '已在主页面启用。';
+      const reading = await chrome.tabs.sendMessage(tabId, { type: 'show-invite' }, { frameId: 0 });
+      siteStatus.textContent = reading ? 'Return to the reader to confirm.' : 'Open a book in the online reader and try again.';
     } catch {
-      siteStatus.textContent = '无法在当前页面启动。请刷新阅读页后重试。';
+      siteStatus.textContent = 'Could not start here. Reload the reader and try again.';
     }
   } finally {
     enable.disabled = false;
   }
 }
 
-start().catch(() => { siteStatus.textContent = '无法读取当前页面。'; });
+start().catch(() => { siteStatus.textContent = 'Could not read the current page.'; });
