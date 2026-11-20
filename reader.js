@@ -1,6 +1,5 @@
 (() => {
   if (globalThis.readingLookupInstalled) return;
-  globalThis.readingLookupInstalled = true;
 
   function watchWordClick(onWord, mayLookup = () => true) {
     let hovered;
@@ -83,6 +82,7 @@
     chrome.runtime.onMessage.addListener(message => {
       if (message.type === 'frame-lookup-state') update(message.enabled);
     });
+    globalThis.readingLookupInstalled = true;
     chrome.runtime.sendMessage({ type: 'get-frame-lookup-state' }).then(update, () => {});
     return;
   }
@@ -292,16 +292,19 @@
   function syncReader() {
     const detected = isReader();
     const currentLocation = location.pathname + location.search;
-    if (detected === readerOpen && (!detected || currentLocation === readerLocation)) return;
+    if (detected === readerOpen && (!detected || currentLocation === readerLocation)) {
+      if (detected && !host.isConnected) (document.body ?? document.documentElement).append(host);
+      return;
+    }
     readerOpen = detected;
     readerLocation = currentLocation;
-    setActive(false);
     setManual(false);
     clearResult();
     panel.hidden = true;
     invite.hidden = !detected;
-    if (detected) document.documentElement.append(host);
+    if (detected) (document.body ?? document.documentElement).append(host);
     else host.remove();
+    if (active) setActive(false);
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, reply) => {
@@ -310,7 +313,7 @@
     if (message.type === 'show-invite') {
       syncReader();
       if (readerOpen && panel.hidden) invite.hidden = false;
-      reply(readerOpen);
+      reply(!readerOpen ? 'not-reader' : panel.hidden ? 'prompt' : 'open');
     }
   });
   let pending = false;
@@ -330,4 +333,5 @@
   window.addEventListener('hashchange', scheduleSync);
   window.addEventListener('resize', scheduleSync);
   syncReader();
+  globalThis.readingLookupInstalled = true;
 })();

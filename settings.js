@@ -46,40 +46,62 @@ async function start() {
 
 async function registerSite(tabId, pattern) {
   enable.disabled = true;
+  siteStatus.textContent = 'Checking reader access…';
+  const host = new URL(pattern).hostname;
+  const target = { tabId, frameIds: [0] };
+  const files = ['word.js', 'reader.js'];
+
   try {
-    const manifest = chrome.runtime.getManifest();
-    const host = new URL(pattern).hostname;
-    const builtIn = manifest.content_scripts[0].matches.some(match => {
+    const builtIn = chrome.runtime.getManifest().content_scripts[0].matches.some(match => {
       const base = match.slice('https://*.'.length, -2);
       return host === base || host.endsWith('.' + base);
     });
     if (!builtIn) {
       const granted = await chrome.permissions.request({ origins: [pattern] });
       if (!granted) {
-        siteStatus.textContent = 'Site access was not granted.';
+        siteStatus.textContent = 'Edge did not grant site access.';
         return;
       }
 
       const id = 'site-' + host;
       if (!(await chrome.scripting.getRegisteredContentScripts({ ids: [id] })).length) {
         await chrome.scripting.registerContentScripts([{
-          id, matches: [pattern], js: ['word.js', 'reader.js'],
+          id, matches: [pattern], js: files,
           allFrames: true, matchOriginAsFallback: true, runAt: 'document_idle'
         }]);
       }
     }
-    // Inject now as well so an already open page does not require a reload.
-    await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ['word.js', 'reader.js'] });
-    const reading = await chrome.tabs.sendMessage(tabId, { type: 'show-invite' }, { frameId: 0 });
-    siteStatus.textContent = reading ? 'Return to the reader to confirm.' : 'Site enabled. Open a book in the online reader.';
-  } catch {
+
+    // A protected child frame can prevent an all-frames injection from succeeding.
+    // Open the top-level prompt independently before reconnecting to book frames.
     try {
-      await chrome.scripting.executeScript({ target: { tabId }, files: ['word.js', 'reader.js'] });
-      const reading = await chrome.tabs.sendMessage(tabId, { type: 'show-invite' }, { frameId: 0 });
-      siteStatus.textContent = reading ? 'Return to the reader to confirm.' : 'Open a book in the online reader and try again.';
+      await chrome.scripting.executeScript({ target, files, injectImmediately: true });
     } catch {
-      siteStatus.textContent = 'Could not start here. Reload the reader and try again.';
+      siteStatus.textContent = 'Edge blocked access to this page. Check Word’s site access.';
+      return;
     }
+
+    let result;
+    try {
+      result = await chrome.tabs.sendMessage(tabId, { type: 'show-invite' }, { frameId: 0 });
+    } catch {
+      siteStatus.textContent = 'Word loaded but could not start. Reload the reader.';
+      return;
+    }
+
+    if (result === 'prompt' || result === 'open') {
+      siteStatus.textContent = result === 'prompt'
+        ? 'Prompt opened. Look at the top right of the reader.'
+        : 'Word is already open in the reader.';
+      chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files, injectImmediately: true })
+        .catch(() => {});
+    } else if (result === 'not-reader') {
+      siteStatus.textContent = 'Site enabled. Open a book in the online reader.';
+    } else {
+      siteStatus.textContent = 'Word did not respond. Reload the reader.';
+    }
+  } catch {
+    siteStatus.textContent = 'Could not set up site access. Try reopening this menu.';
   } finally {
     enable.disabled = false;
   }
