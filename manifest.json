@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Word🤓☝️",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Click a word to see its English definition while reading.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://api.dictionaryapi.dev/*", "https://www.dictionaryapi.com/*"],

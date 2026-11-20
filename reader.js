@@ -110,10 +110,10 @@
       [hidden] { display: none !important; }
       section { box-sizing: border-box; width: max-content; max-width: min(228px, calc(100vw - 24px));
         position: relative; padding: 5px 7px; border-radius: 8px;
-        background: color-mix(in srgb, Canvas 30%, transparent); backdrop-filter: blur(5px); }
+        background: rgb(255 255 255 / 30%); backdrop-filter: blur(5px); }
       .outline { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
       .outline rect { x: 0.65px; y: 0.65px; width: calc(100% - 1.3px); height: calc(100% - 1.3px);
-        rx: 7px; fill: none; stroke: currentColor; stroke-opacity: .55; stroke-width: 1.3; stroke-dasharray: 4 3; }
+        rx: 7px; fill: none; stroke: white; stroke-opacity: .4; stroke-width: 1.3; stroke-dasharray: 4 3; }
       .row, form { display: flex; gap: 4px; align-items: center; }
       button, input { font: inherit; color: inherit; }
       button { background: transparent; border: 0; border-radius: 4px; padding: 3px 5px; cursor: pointer; }
