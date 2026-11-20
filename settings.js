@@ -73,7 +73,7 @@ async function registerSite(tabId, pattern) {
     }
 
     // A protected child frame can prevent an all-frames injection from succeeding.
-    // Open the top-level prompt independently before reconnecting to book frames.
+    // Start lookup in the top-level reader independently before reconnecting to book frames.
     try {
       await chrome.scripting.executeScript({ target, files, injectImmediately: true });
     } catch {
@@ -83,20 +83,18 @@ async function registerSite(tabId, pattern) {
 
     let result;
     try {
-      result = await chrome.tabs.sendMessage(tabId, { type: 'show-invite' }, { frameId: 0 });
+      result = await chrome.tabs.sendMessage(tabId, { type: 'start-lookup' }, { frameId: 0 });
     } catch {
       siteStatus.textContent = 'Word loaded but could not start. Reload the reader.';
       return;
     }
 
-    if (result === 'prompt' || result === 'open') {
-      siteStatus.textContent = result === 'prompt'
-        ? 'Prompt opened. Look at the top right of the reader.'
-        : 'Word is already open in the reader.';
+    if (result === 'open') {
+      siteStatus.textContent = 'Word is on. Click a word in the reader.';
       chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files, injectImmediately: true })
         .catch(() => {});
     } else if (result === 'not-reader') {
-      siteStatus.textContent = 'Site enabled. Open a book in the online reader.';
+      siteStatus.textContent = 'Open a book in the online reader first.';
     } else {
       siteStatus.textContent = 'Word did not respond. Reload the reader.';
     }

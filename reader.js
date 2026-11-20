@@ -128,11 +128,7 @@
       a { color: LinkText; }
       .credit { font-size: 11px; }
     </style>
-    <section id="invite" aria-label="Turn on word lookup" hidden>
-      <svg class="outline" aria-hidden="true"><rect></rect></svg>
-      <div class="row"><span>Turn on word lookup?</span><button id="yes">Turn on</button><button id="no">Not now</button></div>
-    </section>
-    <section id="panel" aria-label="Word lookup" hidden>
+    <section id="panel" aria-label="Word lookup">
       <svg class="outline" aria-hidden="true"><rect></rect></svg>
       <div class="row">
         <button id="toggle" aria-pressed="false">Start</button>
@@ -156,7 +152,6 @@
     </section>`;
 
   const get = selector => root.querySelector(selector);
-  const invite = get('#invite');
   const panel = get('#panel');
   const toggle = get('#toggle');
   const manual = get('#manual');
@@ -170,8 +165,7 @@
   const credit = get('.credit');
   const merriamCredit = get('#merriam-credit');
   let active = false;
-  let readerOpen = false;
-  let readerLocation = '';
+  let readerLocation = null;
   let request = 0;
 
   function setActive(next) {
@@ -254,14 +248,6 @@
     showDefinition(response ?? { status: 'error' });
   }
 
-  get('#yes').addEventListener('click', () => {
-    invite.hidden = true;
-    panel.hidden = false;
-    setActive(true);
-  });
-  get('#no').addEventListener('click', () => {
-    invite.hidden = true;
-  });
   toggle.addEventListener('click', () => {
     setActive(!active);
     if (!active) clearResult();
@@ -288,37 +274,43 @@
   const handleWord = word => {
     if (active && form.hidden) lookup(word);
   };
-  const clearHover = watchWordClick(handleWord, () => active && form.hidden);
-  function syncReader() {
-    const detected = isReader();
-    const currentLocation = location.pathname + location.search;
-    if (detected === readerOpen && (!detected || currentLocation === readerLocation)) {
-      if (detected && !host.isConnected) (document.body ?? document.documentElement).append(host);
-      return;
-    }
-    readerOpen = detected;
-    readerLocation = currentLocation;
+  const clearHover = watchWordClick(handleWord, () => active && readerLocation === location.href && form.hidden);
+  function stopLookup() {
+    if (readerLocation === null) return;
+    readerLocation = null;
+    setActive(false);
     setManual(false);
     clearResult();
-    panel.hidden = true;
-    invite.hidden = !detected;
-    if (detected) (document.body ?? document.documentElement).append(host);
-    else host.remove();
-    if (active) setActive(false);
+    host.remove();
+  }
+
+  function syncReader() {
+    if (readerLocation === null) return;
+    if (readerLocation !== location.href || !isReader()) {
+      stopLookup();
+      return;
+    }
+    if (!host.isConnected) (document.body ?? document.documentElement).append(host);
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, reply) => {
+    syncReader();
     if (message.type === 'reader-word') handleWord(message.word);
     if (message.type === 'reader-lookup-state') reply(active);
-    if (message.type === 'show-invite') {
-      syncReader();
-      if (readerOpen && panel.hidden) invite.hidden = false;
-      reply(!readerOpen ? 'not-reader' : panel.hidden ? 'prompt' : 'open');
+    if (message.type === 'start-lookup') {
+      if (!isReader()) {
+        reply('not-reader');
+        return;
+      }
+      readerLocation = location.href;
+      if (!host.isConnected) (document.body ?? document.documentElement).append(host);
+      setActive(true);
+      reply('open');
     }
   });
   let pending = false;
   const scheduleSync = () => {
-    if (pending) return;
+    if (pending || readerLocation === null) return;
     pending = true;
     requestAnimationFrame(() => {
       pending = false;
@@ -332,6 +324,6 @@
   window.addEventListener('popstate', scheduleSync);
   window.addEventListener('hashchange', scheduleSync);
   window.addEventListener('resize', scheduleSync);
-  syncReader();
+  window.addEventListener('pagehide', stopLookup);
   globalThis.readingLookupInstalled = true;
 })();
