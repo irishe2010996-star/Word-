@@ -1,4 +1,4 @@
-# Word🤓☝️
+# Word🤓☝️ — Word Lookup for Z-Library
 
 An Edge and Chrome extension that shows short English definitions while you read. It uses [Free Dictionary API](https://github.com/meetDeveloper/freeDictionaryAPI) by default and supports Merriam-Webster’s Learner’s Dictionary with your own API key.
 
