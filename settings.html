@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Word🤓☝️设置</title>
+  <style>
+    html { color-scheme: light dark; }
+    body { font: 14px/1.55 system-ui, sans-serif; min-width: 280px; max-width: 420px; margin: 16px; }
+    h1 { font-size: 18px; }
+    label { display: block; }
+    input { display: block; box-sizing: border-box; width: 100%; padding: 5px; font: inherit; }
+    button { font: inherit; cursor: pointer; margin: 3px 3px 3px 0; }
+  </style>
+</head>
+<body>
+  <h1>Word🤓☝️</h1>
+  <p>点一下正文里的英文单词，即可在阅读页查看英英释义。</p>
+  <form>
+    <label>韦氏学习词典 API 密钥
+      <input id="merriam-key" type="password" placeholder="留空使用免费词典" autocomplete="off" spellcheck="false" maxlength="120">
+    </label>
+    <button id="save" disabled>保存词典设置</button>
+    <a href="https://dictionaryapi.com/register/index" target="_blank" rel="noopener noreferrer">注册韦氏密钥</a>
+    <p id="dictionary-status" role="status"></p>
+  </form>
+  <hr>
+  <button id="enable" disabled>在当前站点开启查词</button>
+  <p id="site-status" role="status"></p>
+  <script src="settings.js"></script>
+</body>
+</html>
