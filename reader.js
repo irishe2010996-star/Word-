@@ -5,21 +5,25 @@
   function watchWordClick(onWord, mayLookup = () => true) {
     let hovered;
     let frame = 0;
-    const cursor = document.createElement('style');
-    cursor.textContent = '[data-word-hover], [data-word-hover] * { cursor: pointer !important; }';
+    let previousCursor;
+    let previousPriority;
 
     function clearHover() {
-      hovered?.removeAttribute('data-word-hover');
+      if (hovered?.style.getPropertyValue('cursor') === 'pointer' &&
+          hovered.style.getPropertyPriority('cursor') === 'important') {
+        hovered.style.setProperty('cursor', previousCursor, previousPriority);
+      }
       hovered = null;
     }
 
-    function wordAtPoint(event) {
-      const target = event.target;
+    function wordAtPoint(event, target = event.composedPath()[0]) {
       if (!(target instanceof Element) || target.isContentEditable ||
           target.closest('a, button, input, select, textarea, label, summary, [data-reading-lookup]')) return;
 
       const { clientX: x, clientY: y } = event;
-      const point = document.caretPositionFromPoint?.(x, y);
+      const rootNode = target.getRootNode();
+      const options = rootNode instanceof ShadowRoot ? { shadowRoots: [rootNode] } : undefined;
+      const point = document.caretPositionFromPoint?.(x, y, options);
       const fallback = point ? null : document.caretRangeFromPoint?.(x, y);
       const node = point?.offsetNode ?? fallback?.startContainer;
       const offset = point?.offset ?? fallback?.startOffset;
@@ -41,15 +45,17 @@
 
     document.addEventListener('pointermove', event => {
       if (event.pointerType !== 'mouse' || !mayLookup()) return;
+      const element = event.composedPath()[0];
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        const target = mayLookup() && wordAtPoint(event) ? event.target : null;
+        const target = mayLookup() && wordAtPoint(event, element) ? element : null;
         if (target === hovered) return;
         clearHover();
         if (target) {
-          if (!cursor.isConnected) document.documentElement.append(cursor);
           hovered = target;
-          hovered.setAttribute('data-word-hover', '');
+          previousCursor = hovered.style.getPropertyValue('cursor');
+          previousPriority = hovered.style.getPropertyPriority('cursor');
+          hovered.style.setProperty('cursor', 'pointer', 'important');
         }
       });
     });
@@ -60,7 +66,7 @@
           window.getSelection()?.isCollapsed === false) return;
       const word = wordAtPoint(event);
       if (word) onWord(word);
-    });
+    }, true);
     return clearHover;
   }
 
@@ -95,6 +101,7 @@
 
   const host = document.createElement('div');
   host.setAttribute('data-reading-lookup', '');
+  host.lang = 'en-US';
   const root = host.attachShadow({ mode: 'closed' });
   root.innerHTML = `
     <style>
@@ -121,9 +128,9 @@
       a { color: LinkText; }
       .credit { font-size: 11px; }
     </style>
-    <section id="invite" aria-label="Enable word lookup" hidden>
+    <section id="invite" aria-label="Turn on word lookup" hidden>
       <svg class="outline" aria-hidden="true"><rect></rect></svg>
-      <div class="row"><span>Enable word lookup?</span><button id="yes">Enable</button><button id="no">Later</button></div>
+      <div class="row"><span>Turn on word lookup?</span><button id="yes">Turn on</button><button id="no">Not now</button></div>
     </section>
     <section id="panel" aria-label="Word lookup" hidden>
       <svg class="outline" aria-hidden="true"><rect></rect></svg>
@@ -250,6 +257,7 @@
   get('#yes').addEventListener('click', () => {
     invite.hidden = true;
     panel.hidden = false;
+    setActive(true);
   });
   get('#no').addEventListener('click', () => {
     invite.hidden = true;

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Word🤓☝️",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Click a word to see its English definition while reading.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://api.dictionaryapi.dev/*", "https://www.dictionaryapi.com/*"],
@@ -22,7 +22,7 @@
     ],
     "js": ["word.js", "reader.js"],
     "all_frames": true,
-    "match_about_blank": true,
+    "match_origin_as_fallback": true,
     "run_at": "document_idle"
   }]
 }

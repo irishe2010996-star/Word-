@@ -10,7 +10,7 @@ An Edge and Chrome extension that shows short English definitions while you read
 
 ## Read and look up words
 
-- Open a book in Z-Library’s online reader. On supported reader pages, choose **Enable**, then **Start**.
+- Open a book in Z-Library’s online reader. On supported reader pages, choose **Turn on** to start looking up words.
 - Click an English word in the body text. The cursor becomes a hand over words you can look up. Double-click still selects text.
 - Click 🤪 to enter a word manually. Press Escape or click × to close the definition.
 - If you use another HTTPS mirror, open the extension menu and choose **Enable on this site**. The prompt appears when the extension detects the reader.
